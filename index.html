@@ -84,6 +84,15 @@ section p{margin:4px 0 0}
     var install = testflightUrl
       ? '<a class="quiet" href="' + esc(testflightUrl) + '">还没装?去 TestFlight 安装</a>'
       : '<p class="hint">还没装圈球?找发起人拿安装邀请。</p>';
+    // iPadOS 13+ 的 UA 伪装成 Macintosh,用触点数区分真 Mac 与 iPad
+    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+    if (!isIOS) {
+      // 桌面/安卓没有 App,quanqiu:// 点了无效——换成引导文案
+      return '<div class="cta">' +
+        '<p class="hint">圈球目前只有 iPhone 版——用 iPhone 扫码或打开这条链接,就能唤起 App 进入球局。</p>' +
+        install + '</div>';
+    }
     return '<div class="cta">' +
       '<a class="primary" href="quanqiu://g/' + token + '">打开圈球 App 查看</a>' +
       install +
