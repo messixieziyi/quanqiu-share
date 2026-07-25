@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>球局邀请 · 圈球</title>
+<!--
+  圈球 S27 球局分享落地页(静态,GitHub Pages)。
+  入口:?t=<token> 局卡 / ?about=1 说明页。
+  数据:fetch Supabase Edge Function `g` 的 JSON API(/g/api/<token>);
+  本仓库零密钥——anon key 只存在于函数服务端。
+-->
+<style>
+:root{--ink:#0c3b2a;--cream:#f5f2e7;--card:#fcfbf4;--gold:#c8a24b;--gold-deep:#8a6a12;--line:rgba(12,59,42,.14);--muted:rgba(12,59,42,.62)}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--ink);background:linear-gradient(rgba(12,59,42,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(12,59,42,.018) 1px,transparent 1px),var(--cream);background-size:24px 24px;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC",sans-serif;line-height:1.72;display:flex;flex-direction:column;align-items:center;padding:28px 16px 40px}
+.masthead{text-align:center;margin-bottom:22px}
+.brand{font-family:"Songti SC","STSong",ui-serif,serif;font-size:26px;font-weight:900;letter-spacing:6px}
+.masthead p{margin:2px 0 0;font-size:11px;letter-spacing:3px;color:var(--gold-deep)}
+.card{width:min(560px,100%);background:var(--card);border:1px solid var(--line);border-radius:18px;padding:clamp(24px,6vw,40px);box-shadow:0 10px 30px rgba(12,59,42,.08)}
+.eyebrow{margin:0;font-size:12px;letter-spacing:2px;font-weight:700;color:var(--gold-deep)}
+.tee{margin:6px 0 0;font-family:"Songti SC","STSong",ui-serif,Georgia,serif;font-size:clamp(58px,15vw,88px);font-weight:900;letter-spacing:-2px;line-height:1.05}
+.big{margin:6px 0 0;font-family:"Songti SC","STSong",ui-serif,Georgia,serif;font-size:clamp(30px,8vw,44px);font-weight:900;line-height:1.2}
+.date{margin:2px 0 0;color:var(--muted)}
+.venue{margin:14px 0 0;font-weight:600}
+.seats{margin:4px 0 0;color:var(--muted)}
+.lede{margin:10px 0 0;color:var(--muted)}
+.cta{display:grid;gap:10px;margin-top:24px;justify-items:start}
+.primary{display:inline-block;background:var(--ink);color:var(--cream);text-decoration:none;font-weight:600;padding:12px 22px;border-radius:999px}
+.quiet{color:var(--gold-deep);text-decoration:none;font-size:14px;font-weight:600}
+.hint{margin:0;font-size:13px;color:var(--muted)}
+.foot{margin-top:18px;font-size:13px;color:var(--muted)}
+.foot a{color:var(--gold-deep);text-decoration:none}
+h2{margin:22px 0 6px;font-size:19px}
+section p{margin:4px 0 0}
+.spinner{margin:18px auto;width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--gold-deep);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<header class="masthead"><div class="brand">圈球</div><p>QUANQIU · 高尔夫约球</p></header>
+
+<section class="card" id="view">
+  <div id="loading"><p class="eyebrow">球局邀请</p><div class="spinner"></div></div>
+  <noscript><p class="lede">需要启用 JavaScript 才能查看球局。</p></noscript>
+</section>
+
+<p class="foot">圈球是邀请制的高尔夫约球 App · <a href="?about=1">了解圈球 →</a></p>
+
+<script>
+(function () {
+  var API_BASE = "https://yyasocncgqmrjbqsioad.supabase.co/functions/v1/g/api/";
+  var view = document.getElementById("view");
+  var params = new URLSearchParams(location.search);
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function show(html) { view.innerHTML = html; }
+
+  function aboutHtml() {
+    return '<p class="eyebrow">ABOUT</p>' +
+      '<h1 class="big">圈球是邀请制</h1>' +
+      '<p class="lede">圈球是约球的,不是社交的。这里没有广场、没有附近的人——你能看到的每一个人,都和你有真实的交集:同一个圈、同一场球,或者一起打过。</p>' +
+      '<h2>怎么进来</h2><section><p>由已经在圈球里的球友邀请,或者由两位球友为你担保。收到球局分享的你,找发起人拿一个邀请就能加入。</p></section>' +
+      '<h2>进来之后</h2><section><p>圈子就是现实里常约的那几个人;一起到场打完,才算球友;聊天只为约球,想深聊,球场见。</p></section>';
+  }
+
+  function invalidHtml() {
+    return '<p class="eyebrow">球局邀请</p><h1 class="big">链接无效或已过期</h1>' +
+      '<p class="lede">这条分享链接找不到对应的球局。找发起人重新分享一次吧。</p>';
+  }
+
+  function unavailableHtml() {
+    return '<p class="eyebrow">球局邀请</p><h1 class="big">预览暂时不可用</h1>' +
+      '<p class="lede">服务开小差了,稍后再试。</p>';
+  }
+
+  function ctaHtml(token, testflightUrl) {
+    var install = testflightUrl
+      ? '<a class="quiet" href="' + esc(testflightUrl) + '">还没装?去 TestFlight 安装</a>'
+      : '<p class="hint">还没装圈球?找发起人拿安装邀请。</p>';
+    return '<div class="cta">' +
+      '<a class="primary" href="quanqiu://g/' + token + '">打开圈球 App 查看</a>' +
+      install +
+      '<p class="hint">安装后重新点开原链接即可进入球局。微信里打不开时,点右上角「在浏览器打开」。</p></div>';
+  }
+
+  function cardHtml(card, token, testflightUrl) {
+    var host = card.host ? esc(card.host.display_name) + " 约你打球" : "球局邀请";
+    var area = card.venue ? [card.venue.city, card.venue.district].filter(Boolean).join("") : "";
+    var venueLine = card.venue ? esc(card.venue.name) + (area ? " · " + esc(area) : "") : "场地待定";
+    if (card.status === "cancelled") {
+      return '<p class="eyebrow">' + host + '</p><h1 class="big">这局已取消</h1><p class="venue">' + venueLine + "</p>";
+    }
+    var formatLabel = card.format === "round" ? "下场 18 洞" : "练习场";
+    var seatsLeft = Math.max(0, card.slots - card.filled);
+    var seatText = card.status === "played" ? "已开球" : seatsLeft > 0 ? "还差 " + seatsLeft + " 位" : "已满员";
+    var timeHtml = '<h1 class="big">时间待定</h1>';
+    if (card.effective_starts_at) {
+      var d = new Date(card.effective_starts_at);
+      var t = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+      var dl = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "long", day: "numeric", weekday: "long" }).format(d);
+      timeHtml = '<h1 class="tee">' + t + '</h1><p class="date">' + dl + "</p>";
+    }
+    return '<p class="eyebrow">' + host + "</p>" + timeHtml +
+      '<p class="venue">' + venueLine + "</p>" +
+      '<p class="seats">' + formatLabel + " · " + card.filled + "/" + card.slots + " 人 · " + seatText + "</p>" +
+      (card.status === "played" ? "" : ctaHtml(token, testflightUrl));
+  }
+
+  if (params.get("about")) { show(aboutHtml()); document.title = "圈球是什么 · 圈球"; return; }
+
+  var token = params.get("t") || "";
+  if (!/^[A-Za-z0-9]{16}$/.test(token)) { show(invalidHtml()); return; }
+
+  fetch(API_BASE + token)
+    .then(function (res) {
+      if (res.status === 404) { show(invalidHtml()); return null; }
+      if (!res.ok) { show(unavailableHtml()); return null; }
+      return res.json();
+    })
+    .then(function (data) {
+      if (!data) return;
+      show(cardHtml(data.card, token, data.testflight_url));
+    })
+    .catch(function () { show(unavailableHtml()); });
+})();
+</script>
+</body>
+</html>
