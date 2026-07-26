@@ -99,6 +99,44 @@ section p{margin:4px 0 0}
       '<p class="hint">安装后重新点开原链接即可进入球局。微信里打不开时,点右上角「在浏览器打开」。</p></div>';
   }
 
+  // 审计 P0-2:嘉宾(24 位)/ 担保(32 位)邀请落地页。
+  // 与 ?t= 分享卡不同:token 真伪由 App 内核销/担保时判定,这里没有卡片数据可
+  // fetch——先同步渲染静态文案(标题/CTA 深链接即时可用),TestFlight 链接异步
+  // 补齐,fetch 失败也不影响已渲染的主体。
+  function installHtml(testflightUrl) {
+    return testflightUrl
+      ? '<a class="quiet" href="' + esc(testflightUrl) + '">还没装?去 TestFlight 安装</a>'
+      : '<p class="hint">还没装圈球?找发起人拿安装邀请。</p>';
+  }
+
+  function inviteHtml(kind, token) {
+    var isGuest = kind === "guest";
+    var eyebrow = isGuest ? "嘉宾邀请" : "担保邀请";
+    var title = isGuest ? "球友请你打一场球" : "有人请你担保";
+    var lede = isGuest
+      ? "圈球的球友邀请你作为嘉宾同组打一场。用 iPhone 打开这条链接,就能在圈球 App 里加入这一局。"
+      : "球友正在申请加入圈球,请你为 TA 担保。担保需要你已经是圈球的激活用户。";
+    var deepLink = (isGuest ? "quanqiu://guest/" : "quanqiu://vouch/") + token;
+    var ctaLabel = isGuest ? "打开圈球 App 加入" : "打开圈球 App 查看申请";
+    // iPadOS 13+ 的 UA 伪装成 Macintosh,用触点数区分真 Mac 与 iPad
+    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+    var cta;
+    if (!isIOS) {
+      // 桌面/安卓没有 App,quanqiu:// 点了无效——换成引导文案
+      cta = '<div class="cta">' +
+        '<p class="hint">圈球目前只有 iPhone 版——用 iPhone 打开这条链接,就能唤起 App。</p>' +
+        '<span id="install">' + installHtml(null) + '</span></div>';
+    } else {
+      cta = '<div class="cta">' +
+        '<a class="primary" href="' + deepLink + '">' + ctaLabel + '</a>' +
+        '<span id="install">' + installHtml(null) + '</span>' +
+        '<p class="hint">安装后重新点开原链接即可进入。微信里打不开时,点右上角「在浏览器打开」。</p></div>';
+    }
+    return '<p class="eyebrow">' + eyebrow + '</p><h1 class="big">' + title + '</h1>' +
+      '<p class="lede">' + lede + '</p>' + cta;
+  }
+
   function cardHtml(card, token, testflightUrl) {
     var host = card.host ? esc(card.host.display_name) + " 约你打球" : "球局邀请";
     var area = card.venue ? [card.venue.city, card.venue.district].filter(Boolean).join("") : "";
@@ -123,6 +161,26 @@ section p{margin:4px 0 0}
   }
 
   if (params.get("about")) { show(aboutHtml()); document.title = "圈球是什么 · 圈球"; return; }
+
+  var guestToken = params.get("guest");
+  var vouchToken = params.get("vouch");
+  if (guestToken !== null || vouchToken !== null) {
+    var inviteKind = guestToken !== null ? "guest" : "vouch";
+    var inviteToken = guestToken !== null ? guestToken : vouchToken;
+    var invitePattern = inviteKind === "guest" ? /^[A-Za-z0-9]{24}$/ : /^[A-Za-z0-9]{32}$/;
+    if (!invitePattern.test(inviteToken)) { show(invalidHtml()); return; }
+    show(inviteHtml(inviteKind, inviteToken));
+    document.title = (inviteKind === "guest" ? "嘉宾邀请" : "担保邀请") + " · 圈球";
+    fetch(API_BASE + inviteToken)
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data || !data.testflight_url) return;
+        var el = document.getElementById("install");
+        if (el) el.outerHTML = installHtml(data.testflight_url);
+      })
+      .catch(function () {});
+    return;
+  }
 
   var token = params.get("t") || "";
   if (!/^[A-Za-z0-9]{16}$/.test(token)) { show(invalidHtml()); return; }
